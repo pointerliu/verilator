@@ -1036,6 +1036,7 @@ class ParamVisitor final : public VNVisitor {
     UnrollStateful m_unroller;  // Loop unroller
 
     bool m_iterateModule = false;  // Iterating module body
+    bool m_has_gparam = false;
     bool m_all_gparam = true;
     string m_generateHierName;  // Generate portion of hierarchy name
     string m_unlinkedTxt;  // Text for AstUnlinkedRef
@@ -1228,7 +1229,9 @@ class ParamVisitor final : public VNVisitor {
         // Might jump across functions, so beware if ever add a m_funcp
         if (nodep->varp()) {
             if (nodep->varp()->varType() == VVarType::GPARAM) {
-                m_all_gparam = true;
+                m_has_gparam = true;
+            } else {
+                m_all_gparam = false;
             }
             iterate(nodep->varp());
         }
@@ -1386,15 +1389,16 @@ class ParamVisitor final : public VNVisitor {
         }
     }
 
-    // If Statements with Params Condition
+    // If Statements with Parameter Conditions
     void visit(AstIf* nodep) override {
         UINFO(9, "  GENIF " << nodep << endl);
         iterateAndNextNull(nodep->condp());
 
-        m_all_gparam = false;
+        m_has_gparam = false;
+        m_all_gparam = true;
         auto *cond_expr = nodep->condp();
         iterate(cond_expr);
-        if (!m_all_gparam) return;
+        if (!(m_has_gparam && m_all_gparam)) return;
 
         // We suppress errors when widthing params since short-circuiting in
         // the conditional evaluation may mean these error can never occur. We
