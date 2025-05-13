@@ -177,10 +177,14 @@ static void process() {
 
         // Remove parameters by cloning modules to de-parameterized versions
         //   This requires some width calculations and constant propagation
+        v3Global.rootp()->dumpTreeJsonFile("bfe_rm_params.tree.json");
+
         V3Param::param(v3Global.rootp());
         V3LinkDot::linkDotParamed(v3Global.rootp());  // Cleanup as made new modules
         V3LinkLValue::linkLValue(v3Global.rootp());  // Resolve new VarRefs
         V3Error::abortIfErrors();
+
+        v3Global.rootp()->dumpTreeJsonFile("rm_params.tree.json");
 
         // Remove any modules that were parameterized and are no longer referenced.
         V3Dead::deadifyModules(v3Global.rootp());
