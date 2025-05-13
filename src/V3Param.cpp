@@ -1036,6 +1036,7 @@ class ParamVisitor final : public VNVisitor {
     UnrollStateful m_unroller;  // Loop unroller
 
     bool m_iterateModule = false;  // Iterating module body
+    bool m_all_gparam = true;
     string m_generateHierName;  // Generate portion of hierarchy name
     string m_unlinkedTxt;  // Text for AstUnlinkedRef
     AstNodeModule* m_modp;  // Module iterating
@@ -1225,7 +1226,12 @@ class ParamVisitor final : public VNVisitor {
     // Make sure varrefs cause vars to constify before things above
     void visit(AstVarRef* nodep) override {
         // Might jump across functions, so beware if ever add a m_funcp
-        if (nodep->varp()) iterate(nodep->varp());
+        if (nodep->varp()) {
+            if (nodep->varp()->varType() == VVarType::GPARAM) {
+                m_all_gparam = true;
+            }
+            iterate(nodep->varp());
+        }
     }
     bool ifaceParamReplace(AstVarXRef* nodep, AstNode* candp) {
         for (; candp; candp = candp->nextp()) {
@@ -1377,6 +1383,38 @@ class ParamVisitor final : public VNVisitor {
             // Normal edit rules will now recurse the replacement
         } else {
             nodep->condp()->v3error("Generate If condition must evaluate to constant");
+        }
+    }
+
+    // If Statements with Params Condition
+    void visit(AstIf* nodep) override {
+        UINFO(9, "  GENIF " << nodep << endl);
+        iterateAndNextNull(nodep->condp());
+
+        m_all_gparam = false;
+        auto *cond_expr = nodep->condp();
+        iterate(cond_expr);
+        if (!m_all_gparam) return;
+
+        // We suppress errors when widthing params since short-circuiting in
+        // the conditional evaluation may mean these error can never occur. We
+        // then make sure that short-circuiting is used by constifyParamsEdit.
+        V3Width::widthGenerateParamsEdit(nodep);  // Param typed widthing will
+        // NOT recurse the body.
+        V3Const::constifyGenerateParamsEdit(nodep->condp());  // condp may change
+
+
+        if (const AstConst* const constp = VN_CAST(nodep->condp(), Const)) {
+            if (AstNode* const keepp = (constp->isZero() ? nodep->elsesp() : nodep->thensp())) {
+                keepp->unlinkFrBackWithNext();
+                nodep->replaceWith(keepp);
+            } else {
+                nodep->unlinkFrBack();
+            }
+            VL_DO_DANGLING(nodep->deleteTree(), nodep);
+            // Normal edit rules will now recurse the replacement
+        } else {
+            nodep->condp()->v3error("If condition must evaluate to constant");
         }
     }
 
